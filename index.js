@@ -255,16 +255,28 @@ for (var i = 0; i < 10; i++) {
 window.addEventListener("resize", function () {
     world.resize();
 });
-window.addEventListener("pointermove", function (event) {
+window.addEventListener("mousemove", function (event) {
     world.pointer.update(event.pageX, event.pageY);
     event.preventDefault();
 });
-window.addEventListener("pointerdown", function (event) {
+window.addEventListener("mousedown", function (event) {
     world.pointer.update(event.pageX, event.pageY, true);
     event.preventDefault();
 });
-window.addEventListener("pointerup", function (event) {
+window.addEventListener("mouseup", function (event) {
     world.pointer.update(event.pageX, event.pageY, false);
+    event.preventDefault();
+});
+window.addEventListener("touchmove", function (event) {
+    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY);
+    event.preventDefault();
+});
+window.addEventListener("touchstart", function (event) {
+    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, true);
+    event.preventDefault();
+});
+window.addEventListener("touchend", function (event) {
+    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, false);
     event.preventDefault();
 });
 window.addEventListener("devicemotion", function (event) {

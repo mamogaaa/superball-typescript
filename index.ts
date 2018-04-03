@@ -261,18 +261,33 @@ window.addEventListener("resize", () => {
   world.resize();
 });
 
-window.addEventListener("pointermove", (event) => {
+window.addEventListener("mousemove", (event) => {
   world.pointer.update(event.pageX, event.pageY);
   event.preventDefault();
 });
 
-window.addEventListener("pointerdown", (event) => {
+window.addEventListener("mousedown", (event) => {
   world.pointer.update(event.pageX, event.pageY, true);
   event.preventDefault();
 });
 
-window.addEventListener("pointerup", (event) => {
+window.addEventListener("mouseup", (event) => {
   world.pointer.update(event.pageX, event.pageY, false);
+  event.preventDefault();
+});
+
+window.addEventListener("touchmove", (event) => {
+  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY);
+  event.preventDefault();
+});
+
+window.addEventListener("touchstart", (event) => {
+  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, true);
+  event.preventDefault();
+});
+
+window.addEventListener("touchend", (event) => {
+  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, false);
   event.preventDefault();
 });
 
