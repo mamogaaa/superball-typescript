@@ -1,7 +1,7 @@
 {
   "name": "Superball",
   "short_name": "Superball",
-  "start_url": "/index.html",
+  "start_url": "https://nordikafiles.github.io/superball-typescript/index.html",
   "display": "fullscreen",
   "orientation": "portrait-primary"
 }
