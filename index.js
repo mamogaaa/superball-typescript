@@ -388,6 +388,6 @@ window.addEventListener("touchend", function (event) {
     event.preventDefault();
 });
 window.addEventListener("devicemotion", function (event) {
-    world.gravity = new Point(event.accelerationIncludingGravity.x, -event.accelerationIncludingGravity.y);
+    world.gravity = new Point(event.accelerationIncludingGravity.x / 10, -event.accelerationIncludingGravity.y / 10);
     world.gravity.multiply(1 / 30);
 });
