@@ -1,0 +1,14 @@
+{
+  "name": "superball-typescript",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc index.ts",
+    "dev": "tsc -w index.ts",
+    "server": "http-server -a 0.0.0.0 -p 3000"
+  },
+  "author": "",
+  "license": "ISC"
+}
