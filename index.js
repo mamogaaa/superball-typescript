@@ -156,5 +156,5 @@ window.addEventListener("resize", function () {
 });
 window.addEventListener("devicemotion", function (event) {
     world.gravity = new Point(event.accelerationIncludingGravity.x, -event.accelerationIncludingGravity.y);
-    world.gravity.multiply(1 / 10);
+    world.gravity.multiply(1 / 30);
 });
