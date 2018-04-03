@@ -183,11 +183,13 @@ var Pointer = /** @class */ (function () {
         this.pressed = pressed;
         this.timestamp = Date.now();
     }
-    Pointer.prototype.update = function (x, y, pressed) {
+    Pointer.prototype.update = function (x, y, pressed, event) {
         if (pressed === void 0) { pressed = undefined; }
+        if (event === void 0) { event = undefined; }
         var newPosition = new Point(x, y);
         var newTimestamp = Date.now();
-        this.speed = newPosition.add(this.position.multiply(-1)).multiply(1 / (newTimestamp - this.timestamp) * 1000);
+        if (event.type != 'touchend')
+            this.speed = newPosition.add(this.position.multiply(-1)).multiply(1 / (newTimestamp - this.timestamp) * 1000);
         this.timestamp = newTimestamp;
         this.position = newPosition;
         if (pressed !== undefined)
@@ -362,27 +364,27 @@ window.addEventListener("resize", function () {
     world.resize();
 });
 window.addEventListener("mousemove", function (event) {
-    world.pointer.update(event.pageX, event.pageY);
+    world.pointer.update(event.pageX, event.pageY, undefined, event);
     event.preventDefault();
 });
 window.addEventListener("mousedown", function (event) {
-    world.pointer.update(event.pageX, event.pageY, true);
+    world.pointer.update(event.pageX, event.pageY, true, event);
     event.preventDefault();
 });
 window.addEventListener("mouseup", function (event) {
-    world.pointer.update(event.pageX, event.pageY, false);
+    world.pointer.update(event.pageX, event.pageY, false, event);
     event.preventDefault();
 });
 window.addEventListener("touchmove", function (event) {
-    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY);
+    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, undefined, event);
     event.preventDefault();
 });
 window.addEventListener("touchstart", function (event) {
-    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, true);
+    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, true, event);
     event.preventDefault();
 });
 window.addEventListener("touchend", function (event) {
-    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, false);
+    world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, false, event);
     event.preventDefault();
 });
 window.addEventListener("devicemotion", function (event) {

@@ -179,11 +179,12 @@ class Pointer {
     this.timestamp = Date.now();
   }
 
-  public update(x:number, y:number, pressed:any = undefined) {
+  public update(x:number, y:number, pressed:any = undefined, event:any = undefined) {
 
     let newPosition = new Point(x, y);
     let newTimestamp = Date.now();
-    this.speed = newPosition.add(this.position.multiply(-1)).multiply(1/(newTimestamp - this.timestamp)*1000);
+    if (event.type != 'touchend')
+      this.speed = newPosition.add(this.position.multiply(-1)).multiply(1/(newTimestamp - this.timestamp)*1000);
     this.timestamp = newTimestamp;
     this.position = newPosition;
     if (pressed !== undefined)
@@ -360,32 +361,32 @@ window.addEventListener("resize", () => {
 });
 
 window.addEventListener("mousemove", (event) => {
-  world.pointer.update(event.pageX, event.pageY);
+  world.pointer.update(event.pageX, event.pageY, undefined, event);
   event.preventDefault();
 });
 
 window.addEventListener("mousedown", (event) => {
-  world.pointer.update(event.pageX, event.pageY, true);
+  world.pointer.update(event.pageX, event.pageY, true, event);
   event.preventDefault();
 });
 
 window.addEventListener("mouseup", (event) => {
-  world.pointer.update(event.pageX, event.pageY, false);
+  world.pointer.update(event.pageX, event.pageY, false, event);
   event.preventDefault();
 });
 
 window.addEventListener("touchmove", (event) => {
-  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY);
+  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, undefined, event);
   event.preventDefault();
 });
 
 window.addEventListener("touchstart", (event) => {
-  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, true);
+  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, true, event);
   event.preventDefault();
 });
 
 window.addEventListener("touchend", (event) => {
-  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, false);
+  world.pointer.update(event.changedTouches[0].pageX, event.changedTouches[0].pageY, false, event);
   event.preventDefault();
 });
 
