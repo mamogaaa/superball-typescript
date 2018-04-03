@@ -1,7 +1,7 @@
 {
   "name": "Superball",
   "short_name": "Superball",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#fff"
+  "start_url": "/index.html",
+  "display": "fullscreen",
+  "orientation": "portrait-primary"
 }
