@@ -8,6 +8,22 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var Color = /** @class */ (function () {
+    function Color(r, g, b, a) {
+        if (a === void 0) { a = 1; }
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = a;
+    }
+    Color.prototype.setAlpha = function (a) {
+        return new Color(this.r, this.g, this.b, a);
+    };
+    Color.prototype.toString = function () {
+        return "rgba(" + this.r + "," + this.g + "," + this.b + "," + this.a + ")";
+    };
+    return Color;
+}());
 var Rand = /** @class */ (function () {
     function Rand() {
     }
@@ -19,7 +35,7 @@ var Rand = /** @class */ (function () {
     Rand.getRandomColor = function (start, end) {
         if (start === void 0) { start = 60; }
         if (end === void 0) { end = 255; }
-        return "rgb(" + this.getRandomInt(start, end) + "," + this.getRandomInt(start, end) + "," + this.getRandomInt(start, end) + ")";
+        return new Color(this.getRandomInt(start, end), this.getRandomInt(start, end), this.getRandomInt(start, end));
     };
     return Rand;
 }());
@@ -56,6 +72,9 @@ var WorldObject = /** @class */ (function () {
         this.size = size;
         this.position = position;
         this.speed = speed;
+        this.hover = false;
+        this.drag = false;
+        this.dragPoint = new Point(0, 0);
         this.init();
     }
     WorldObject.prototype.init = function () {
@@ -75,7 +94,37 @@ var WorldObject = /** @class */ (function () {
     WorldObject.prototype.remove = function () {
         this.removed = true;
     };
+    WorldObject.prototype.dragStart = function (p) {
+        if (this.drag)
+            return;
+        this.drag = true;
+        this.dragPoint = p.add(this.position.multiply(-1));
+    };
+    WorldObject.prototype.dragMove = function (p) {
+        if (!this.drag)
+            return;
+        this.position = p.add(this.dragPoint.multiply(-1));
+    };
+    WorldObject.prototype.dragEnd = function (p) {
+        if (!this.drag)
+            return;
+        this.drag = false;
+        this.speed = new Point(0, 0);
+    };
     WorldObject.prototype.contains = function (p) {
+        if (Array.isArray(p))
+            return this.containsPoints(p);
+        return this.containsPoint(p);
+    };
+    WorldObject.prototype.containsPoint = function (p) {
+        return false;
+    };
+    WorldObject.prototype.containsPoints = function (points) {
+        for (var _i = 0, points_1 = points; _i < points_1.length; _i++) {
+            var p = points_1[_i];
+            if (this.containsPoint(p))
+                return true;
+        }
         return false;
     };
     return WorldObject;
@@ -83,21 +132,29 @@ var WorldObject = /** @class */ (function () {
 var Ball = /** @class */ (function (_super) {
     __extends(Ball, _super);
     function Ball() {
-        return _super !== null && _super.apply(this, arguments) || this;
+        var _this = _super !== null && _super.apply(this, arguments) || this;
+        _this.color = Rand.getRandomColor();
+        return _this;
     }
     Ball.prototype.init = function () {
-        this.color = Rand.getRandomColor();
         this.elasticity = 0.8;
     };
     Ball.prototype.render = function (ctx) {
         ctx.beginPath();
         ctx.arc(this.position.x + this.size.x / 2, this.position.y + this.size.y / 2, this.size.x / 2, 2 * Math.PI, false);
-        ctx.fillStyle = this.color;
+        ctx.fillStyle = this.getColor().toString();
         ctx.fill();
     };
-    Ball.prototype.contains = function (p) {
+    Ball.prototype.containsPoint = function (p) {
         var center = this.position.add(this.size.multiply(0.5));
         return center.add(p.multiply(-1)).length() <= this.size.x / 2;
+    };
+    Ball.prototype.getColor = function () {
+        if (this.drag)
+            return this.color.setAlpha(0.6);
+        if (this.hover)
+            return this.color.setAlpha(0.8);
+        return this.color;
     };
     Ball.createRandom = function (worldSize, radius, speed) {
         if (radius === void 0) { radius = Rand.getRandomInt(20, 120); }
@@ -108,9 +165,27 @@ var Ball = /** @class */ (function (_super) {
     };
     return Ball;
 }(WorldObject));
+var Pointer = /** @class */ (function () {
+    function Pointer(x, y, pressed) {
+        if (x === void 0) { x = 0; }
+        if (y === void 0) { y = 0; }
+        if (pressed === void 0) { pressed = false; }
+        this.pressed = false;
+        this.position = new Point(x, y);
+        this.pressed = pressed;
+    }
+    Pointer.prototype.update = function (x, y, pressed) {
+        if (pressed === void 0) { pressed = undefined; }
+        this.position = new Point(x, y);
+        if (pressed !== undefined)
+            this.pressed = pressed;
+    };
+    return Pointer;
+}());
 var World = /** @class */ (function () {
     function World(element) {
         this.element = element;
+        this.pointer = new Pointer();
         this.objectsToAdd = [];
         this.objects = [];
         this.gravity = new Point(0, 0.5);
@@ -134,12 +209,38 @@ var World = /** @class */ (function () {
         this.clear();
         this.objects = this.objects.concat(this.objectsToAdd);
         this.objectsToAdd = [];
+        var hoverObject = null;
+        var dragObject = null;
+        for (var _i = 0, _a = this.objects; _i < _a.length; _i++) {
+            var object = _a[_i];
+            object.hover = false;
+            if (object.contains(this.pointer.position))
+                hoverObject = object;
+            if (object.drag)
+                dragObject = object;
+        }
+        if (hoverObject)
+            hoverObject.hover = true;
+        if (dragObject) {
+            dragObject.dragMove(this.pointer.position);
+            if (!this.pointer.pressed) {
+                dragObject.dragEnd(this.pointer.position);
+                dragObject.hover = false;
+            }
+            else
+                dragObject.hover = true;
+        }
+        if (this.pointer.pressed && hoverObject && !dragObject)
+            hoverObject.dragStart(this.pointer.position);
         this.objects = this.objects.filter(function (object) {
-            object.tick(_this);
-            if (!object.removed)
-                object.render(_this.ctx);
+            if (!object.drag)
+                object.tick(_this);
             return !object.removed;
         });
+        for (var _b = 0, _c = this.objects; _b < _c.length; _b++) {
+            var object = _c[_b];
+            object.render(this.ctx);
+        }
         requestAnimationFrame(function () { return _this.tick(); });
     };
     World.prototype.clear = function () {
@@ -153,6 +254,18 @@ for (var i = 0; i < 10; i++) {
 }
 window.addEventListener("resize", function () {
     world.resize();
+});
+window.addEventListener("pointermove", function (event) {
+    world.pointer.update(event.pageX, event.pageY);
+    event.preventDefault();
+});
+window.addEventListener("pointerdown", function (event) {
+    world.pointer.update(event.pageX, event.pageY, true);
+    event.preventDefault();
+});
+window.addEventListener("pointerup", function (event) {
+    world.pointer.update(event.pageX, event.pageY, false);
+    event.preventDefault();
 });
 window.addEventListener("devicemotion", function (event) {
     world.gravity = new Point(event.accelerationIncludingGravity.x, -event.accelerationIncludingGravity.y);
