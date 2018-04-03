@@ -99,21 +99,21 @@ class WorldObject {
     this.removed = true;
   }
 
-  public dragStart(p:Point):void {
+  public dragStart(p:Point, pointer:Pointer):void {
     if (this.drag) return;
     this.drag = true;
     this.dragPoint = p.add(this.position.multiply(-1));
   }
 
-  public dragMove(p:Point):void {
+  public dragMove(p:Point, pointer:Pointer):void {
     if (!this.drag) return;
     this.position = p.add(this.dragPoint.multiply(-1));
   }
 
-  public dragEnd(p:Point):void {
+  public dragEnd(p:Point, pointer:Pointer):void {
     if (!this.drag) return;
     this.drag = false;
-    this.speed = new Point(0, 0);
+    this.speed = pointer.speed.multiply(1/this.world.getFPS());
   }
 
   public contains(p:any):boolean {
@@ -168,16 +168,24 @@ class Ball extends WorldObject {
 
 class Pointer {
   public position:Point;
-  public pressed = false;
+  public speed:number = 0;
+  public timestamp:number = Date.now();
+  public pressed:boolean = false;
   public id:string;
 
   constructor(x:number = 0, y:number = 0, pressed:boolean = false) {
     this.position = new Point(x, y);
     this.pressed = pressed;
+    this.timestamp = Date.now();
   }
 
   public update(x:number, y:number, pressed:any = undefined) {
-    this.position = new Point(x, y);
+
+    let newPosition = new Point(x, y);
+    let newTimestamp = Date.now();
+    this.speed = newPosition.add(this.position.multiply(-1)).multiply(1/(newTimestamp - this.timestamp)*1000);
+    this.timestamp = newTimestamp;
+    this.position = newPosition;
     if (pressed !== undefined)
       this.pressed = pressed;
   }
@@ -194,18 +202,35 @@ class GravitySlider extends WorldObject {
     // let center = this.position.add(this.size.multiply(1/2));
   }
 
-  public dragMove(p:Point):void {
+  public dragMove(p:Point, pointer:Pointer):void {
     if (!this.drag) return;
     this.dragPoint = p.add(this.position.multiply(-1));
-    console.log('dragMove')
+    if (this.dragPoint.x >= this.size.x)
+      this.dragPoint.x = this.size.x;
+    if (this.dragPoint.y >= this.size.y)
+      this.dragPoint.y = this.size.y;
+    if (this.dragPoint.y <= 0)
+      this.dragPoint.y = 0;
+    if (this.dragPoint.x <= 0)
+      this.dragPoint.x = 0;
     this.world.gravity = this.dragPoint.add(this.size.multiply(-1/2)).multiply(1/50);
   }
 
   public render(ctx:any):void {
+    let handlePosition = this.position;
+    if (handlePosition.x >= this.size.x)
+      handlePosition.x = this.size.x;
+    if (handlePosition.y >= this.size.y)
+      handlePosition.y = this.size.y;
+    if (handlePosition.y <= 0)
+      handlePosition.y = 0;
+    if (handlePosition.x <= 0)
+      handlePosition.x = 0;
+    handlePosition = handlePosition.add(this.size.multiply(1/2)).add(this.world.gravity.multiply(50));
     ctx.fillStyle = ctx.strokeStyle = this.hover ? "blue": "red";
     ctx.strokeRect(this.position.x, this.position.y, this.size.x, this.size.y);
     ctx.beginPath();
-    ctx.arc(this.position.add(this.size.multiply(1/2)).add(this.world.gravity.multiply(50)).x, this.position.add(this.size.multiply(1/2)).add(this.world.gravity.multiply(50)).y, 10, 2 * Math.PI, false);
+    ctx.arc(handlePosition.x, handlePosition.y, 10, 2 * Math.PI, false);
     ctx.fill();
     ctx.font = '10px Arial';
     ctx.textAlign = 'left';
@@ -278,16 +303,16 @@ class World {
     if (hoverObject)
       hoverObject.hover = true;
     if (dragObject) {
-      dragObject.dragMove(this.pointer.position);
+      dragObject.dragMove(this.pointer.position, this.pointer);
       if (!this.pointer.pressed) {
-        dragObject.dragEnd(this.pointer.position);
+        dragObject.dragEnd(this.pointer.position, this.pointer);
         dragObject.hover = false;
       } else
         dragObject.hover = true;
     }
 
     if (this.pointer.pressed && hoverObject && !dragObject)
-      hoverObject.dragStart(this.pointer.position);
+      hoverObject.dragStart(this.pointer.position, this.pointer);
 
     this.objects = this.objects.filter((object:WorldObject):boolean => {
       if (!object.drag)
