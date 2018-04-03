@@ -1,0 +1,7 @@
+{
+  "name": "Superball",
+  "short_name": "Superball",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#fff"
+}
