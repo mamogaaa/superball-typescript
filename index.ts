@@ -48,7 +48,7 @@ class Point {
   }
 
   public contains(p:Point):boolean {
-    return p.x <= this.x && p.y <= this.y;
+    return p.x <= this.x && p.y <= this.y && p.x >= 0 && p.y >= 0;
   }
  
   static getDistance(x:Point, y:Point):number {
@@ -57,17 +57,19 @@ class Point {
 }
 
 class WorldObject {
+  public world:World;
   public removed:boolean;
   public elasticity:number;
   public hover:boolean = false;
   public drag:boolean = false;
+  public priority:number = 10;
   protected dragPoint:Point = new Point(0, 0);
 
-  constructor(public size:Point, public position:Point, public speed:Point) {
-    this.init();
+  constructor(public size:Point, public position:Point, public speed:Point = new Point(0, 0)) {
+  
   }
 
-  protected init():void {
+  public init(world:World):void {
 
   }
  
@@ -76,15 +78,21 @@ class WorldObject {
   }
 
   public tick(world:World):void {
-    this.speed = this.speed.round(2);
+    this.speed = this.speed.round(1);
+    this.position = this.position.round(1);
+
+    if (this.position.x >= world.size.x - this.size.x && this.speed.x > 0)
+      this.speed.x = -Math.abs(this.speed.x)*this.elasticity;
+    if (this.position.y >= world.size.y - this.size.y && this.speed.y > 0)
+      this.speed.y = -Math.abs(this.speed.y)*this.elasticity;
+    if (this.position.x <= 0 && this.speed.x < 0)
+      this.speed.x = Math.abs(this.speed.x)*this.elasticity;
+    if (this.position.y <= 0 && this.speed.y < 0)
+      this.speed.y = Math.abs(this.speed.y)*this.elasticity;
+
     if (world.size.contains(this.position.add(this.size)))
       this.speed = this.speed.add(world.gravity);
     this.position = this.position.add(this.speed);
-
-    if ((this.position.x >= world.size.x - this.size.x && this.speed.x >= 0) || this.position.x <= 0 && this.speed.x <= 0)
-      this.speed.x *= -1 * this.elasticity;
-    if ((this.position.y >= world.size.y - this.size.y && this.speed.y >= 0) || this.position.y <= 0 && this.speed.y <= 0)
-      this.speed.y *= -1 * this.elasticity;
   }
 
   public remove():void {
@@ -115,7 +123,7 @@ class WorldObject {
   }
 
   protected containsPoint(p:Point):boolean {
-    return false;
+    return this.size.contains(p.add(this.position.multiply(-1)));
   }
 
   protected containsPoints(points:Array<Point>):boolean {
@@ -127,7 +135,7 @@ class WorldObject {
 
 class Ball extends WorldObject {
   public color:Color = Rand.getRandomColor();
-  protected init():void {
+  public init(world:World):void {
     this.elasticity = 0.8;
   }
 
@@ -176,11 +184,43 @@ class Pointer {
 
 }
 
+class GravitySlider extends WorldObject {
+  public priority:number = -1;
+  public init(world:World) {
+    this.position = new Point(20, 20);
+  }
+
+  public tick(world:World):void {
+    // let center = this.position.add(this.size.multiply(1/2));
+  }
+
+  public dragMove(p:Point):void {
+    if (!this.drag) return;
+    this.dragPoint = p.add(this.position.multiply(-1));
+    console.log('dragMove')
+    this.world.gravity = this.dragPoint.add(this.size.multiply(-1/2)).multiply(1/50);
+  }
+
+  public render(ctx:any):void {
+    ctx.fillStyle = ctx.strokeStyle = this.hover ? "blue": "red";
+    ctx.strokeRect(this.position.x, this.position.y, this.size.x, this.size.y);
+    ctx.beginPath();
+    ctx.arc(this.position.add(this.size.multiply(1/2)).add(this.world.gravity.multiply(50)).x, this.position.add(this.size.multiply(1/2)).add(this.world.gravity.multiply(50)).y, 10, 2 * Math.PI, false);
+    ctx.fill();
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${this.world.gravity.x.toFixed(2)}, ${this.world.gravity.y.toFixed(2)}`, this.position.x, this.position.add(this.size).y+15);
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${world.getFPS()} FPS`, this.position.add(this.size).x, this.position.add(this.size).y+15);
+  }
+}
+
 class World {
   constructor (private element:any) {
     this.objectsToAdd = [];
     this.objects = [];
-    this.gravity = new Point(0, 0.5);
+    this.gravity = new Point(0, 0);
     this.init();
   }
 
@@ -189,10 +229,17 @@ class World {
   public pointer:Pointer = new Pointer();
   public objects:Array<WorldObject>;
   public ctx:any;
+  private ticks:number = 0;
+  private ticksInterval:number = 1000;
+  private fps:number = 0;
 
   public init():void {
     this.resize();
     this.tick();
+    setInterval(() => {
+      this.fps = this.ticks;
+      this.ticks = 0;
+    }, this.ticksInterval)
   }
 
   public resize():void {
@@ -204,12 +251,20 @@ class World {
 
   public addObject(object:WorldObject):void {
     this.objectsToAdd.push(object);
+    object.world = this;
+    object.init(this);
+  }
+
+  public getFPS():number {
+    return this.fps;
   }
 
   private tick():void {
+    this.ticks++;
     this.clear();
     this.objects = this.objects.concat(this.objectsToAdd);
     this.objectsToAdd = [];
+    this.sortObjects();
     let hoverObject = null;
     let dragObject = null;
     for (let object of this.objects) {
@@ -246,6 +301,23 @@ class World {
     requestAnimationFrame(() => this.tick());
   }
 
+  private getPriorities():Array<number> {
+    let result = [];
+    for (let object of this.objects)
+      if (result.indexOf(object.priority) < 0)
+        result.push(object.priority);
+    return result.sort();
+  }
+
+  private sortObjects():void {
+    let result = [];
+    for (let priority of this.getPriorities())
+      for (let object of this.objects.find(x => x.priority == priority))
+        result.push(object);
+    if (result.length > 0)
+      this.objects = result;
+  }
+
   private clear():void {
     this.ctx.clearRect(0, 0, this.size.x, this.size.y);
   }
@@ -257,6 +329,7 @@ const world = new World(document.getElementById("canvas"));
 for (let i = 0; i < 10; i++) {
   world.addObject(Ball.createRandom(world.size));
 }
+world.addObject(new GravitySlider(new Point(100, 100), new Point(50, 50)));
 window.addEventListener("resize", () => {
   world.resize();
 });

@@ -60,7 +60,7 @@ var Point = /** @class */ (function () {
         return new Point(+this.x.toFixed(n), +this.y.toFixed(n));
     };
     Point.prototype.contains = function (p) {
-        return p.x <= this.x && p.y <= this.y;
+        return p.x <= this.x && p.y <= this.y && p.x >= 0 && p.y >= 0;
     };
     Point.getDistance = function (x, y) {
         return Math.sqrt(Math.pow(x.x - y.x, 2) + Math.pow(x.y - y.y, 2));
@@ -69,27 +69,33 @@ var Point = /** @class */ (function () {
 }());
 var WorldObject = /** @class */ (function () {
     function WorldObject(size, position, speed) {
+        if (speed === void 0) { speed = new Point(0, 0); }
         this.size = size;
         this.position = position;
         this.speed = speed;
         this.hover = false;
         this.drag = false;
+        this.priority = 10;
         this.dragPoint = new Point(0, 0);
-        this.init();
     }
-    WorldObject.prototype.init = function () {
+    WorldObject.prototype.init = function (world) {
     };
     WorldObject.prototype.render = function (ctx) {
     };
     WorldObject.prototype.tick = function (world) {
-        this.speed = this.speed.round(2);
+        this.speed = this.speed.round(1);
+        this.position = this.position.round(1);
+        if (this.position.x >= world.size.x - this.size.x && this.speed.x > 0)
+            this.speed.x = -Math.abs(this.speed.x) * this.elasticity;
+        if (this.position.y >= world.size.y - this.size.y && this.speed.y > 0)
+            this.speed.y = -Math.abs(this.speed.y) * this.elasticity;
+        if (this.position.x <= 0 && this.speed.x < 0)
+            this.speed.x = Math.abs(this.speed.x) * this.elasticity;
+        if (this.position.y <= 0 && this.speed.y < 0)
+            this.speed.y = Math.abs(this.speed.y) * this.elasticity;
         if (world.size.contains(this.position.add(this.size)))
             this.speed = this.speed.add(world.gravity);
         this.position = this.position.add(this.speed);
-        if ((this.position.x >= world.size.x - this.size.x && this.speed.x >= 0) || this.position.x <= 0 && this.speed.x <= 0)
-            this.speed.x *= -1 * this.elasticity;
-        if ((this.position.y >= world.size.y - this.size.y && this.speed.y >= 0) || this.position.y <= 0 && this.speed.y <= 0)
-            this.speed.y *= -1 * this.elasticity;
     };
     WorldObject.prototype.remove = function () {
         this.removed = true;
@@ -117,7 +123,7 @@ var WorldObject = /** @class */ (function () {
         return this.containsPoint(p);
     };
     WorldObject.prototype.containsPoint = function (p) {
-        return false;
+        return this.size.contains(p.add(this.position.multiply(-1)));
     };
     WorldObject.prototype.containsPoints = function (points) {
         for (var _i = 0, points_1 = points; _i < points_1.length; _i++) {
@@ -136,7 +142,7 @@ var Ball = /** @class */ (function (_super) {
         _this.color = Rand.getRandomColor();
         return _this;
     }
-    Ball.prototype.init = function () {
+    Ball.prototype.init = function (world) {
         this.elasticity = 0.8;
     };
     Ball.prototype.render = function (ctx) {
@@ -182,18 +188,61 @@ var Pointer = /** @class */ (function () {
     };
     return Pointer;
 }());
+var GravitySlider = /** @class */ (function (_super) {
+    __extends(GravitySlider, _super);
+    function GravitySlider() {
+        var _this = _super !== null && _super.apply(this, arguments) || this;
+        _this.priority = -1;
+        return _this;
+    }
+    GravitySlider.prototype.init = function (world) {
+        this.position = new Point(20, 20);
+    };
+    GravitySlider.prototype.tick = function (world) {
+        // let center = this.position.add(this.size.multiply(1/2));
+    };
+    GravitySlider.prototype.dragMove = function (p) {
+        if (!this.drag)
+            return;
+        this.dragPoint = p.add(this.position.multiply(-1));
+        console.log('dragMove');
+        this.world.gravity = this.dragPoint.add(this.size.multiply(-1 / 2)).multiply(1 / 50);
+    };
+    GravitySlider.prototype.render = function (ctx) {
+        ctx.fillStyle = ctx.strokeStyle = this.hover ? "blue" : "red";
+        ctx.strokeRect(this.position.x, this.position.y, this.size.x, this.size.y);
+        ctx.beginPath();
+        ctx.arc(this.position.add(this.size.multiply(1 / 2)).add(this.world.gravity.multiply(50)).x, this.position.add(this.size.multiply(1 / 2)).add(this.world.gravity.multiply(50)).y, 10, 2 * Math.PI, false);
+        ctx.fill();
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(this.world.gravity.x.toFixed(2) + ", " + this.world.gravity.y.toFixed(2), this.position.x, this.position.add(this.size).y + 15);
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(world.getFPS() + " FPS", this.position.add(this.size).x, this.position.add(this.size).y + 15);
+    };
+    return GravitySlider;
+}(WorldObject));
 var World = /** @class */ (function () {
     function World(element) {
         this.element = element;
         this.pointer = new Pointer();
+        this.ticks = 0;
+        this.ticksInterval = 1000;
+        this.fps = 0;
         this.objectsToAdd = [];
         this.objects = [];
-        this.gravity = new Point(0, 0.5);
+        this.gravity = new Point(0, 0);
         this.init();
     }
     World.prototype.init = function () {
+        var _this = this;
         this.resize();
         this.tick();
+        setInterval(function () {
+            _this.fps = _this.ticks;
+            _this.ticks = 0;
+        }, this.ticksInterval);
     };
     World.prototype.resize = function () {
         this.size = new Point(window.innerWidth, window.innerHeight);
@@ -203,12 +252,19 @@ var World = /** @class */ (function () {
     };
     World.prototype.addObject = function (object) {
         this.objectsToAdd.push(object);
+        object.world = this;
+        object.init(this);
+    };
+    World.prototype.getFPS = function () {
+        return this.fps;
     };
     World.prototype.tick = function () {
         var _this = this;
+        this.ticks++;
         this.clear();
         this.objects = this.objects.concat(this.objectsToAdd);
         this.objectsToAdd = [];
+        this.sortObjects();
         var hoverObject = null;
         var dragObject = null;
         for (var _i = 0, _a = this.objects; _i < _a.length; _i++) {
@@ -243,6 +299,31 @@ var World = /** @class */ (function () {
         }
         requestAnimationFrame(function () { return _this.tick(); });
     };
+    World.prototype.getPriorities = function () {
+        var result = [];
+        for (var _i = 0, _a = this.objects; _i < _a.length; _i++) {
+            var object = _a[_i];
+            if (result.indexOf(object.priority) < 0)
+                result.push(object.priority);
+        }
+        return result.sort();
+    };
+    World.prototype.sortObjects = function () {
+        var result = [];
+        var _loop_1 = function (priority) {
+            for (var _i = 0, _a = this_1.objects.find(function (x) { return x.priority == priority; }); _i < _a.length; _i++) {
+                var object = _a[_i];
+                result.push(object);
+            }
+        };
+        var this_1 = this;
+        for (var _i = 0, _a = this.getPriorities(); _i < _a.length; _i++) {
+            var priority = _a[_i];
+            _loop_1(priority);
+        }
+        if (result.length > 0)
+            this.objects = result;
+    };
     World.prototype.clear = function () {
         this.ctx.clearRect(0, 0, this.size.x, this.size.y);
     };
@@ -252,6 +333,7 @@ var world = new World(document.getElementById("canvas"));
 for (var i = 0; i < 10; i++) {
     world.addObject(Ball.createRandom(world.size));
 }
+world.addObject(new GravitySlider(new Point(100, 100), new Point(50, 50)));
 window.addEventListener("resize", function () {
     world.resize();
 });
