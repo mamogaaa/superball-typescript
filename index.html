@@ -14,10 +14,23 @@
       margin: 0;
       padding: 0;
     }
+    .settings-box {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      text-align: right;
+    }
   </style>
 </head>
 <body>
   <canvas id="canvas" width="640" height="480"></canvas>
+  <div class="settings-box">
+    <label>
+      <input type="checkbox" id="motionSensor" checked> Motion sensor
+    </label>
+    <br>
+    <button id="resetGravity">Reset gravity</button>
+  </div>
   <script src="index.js"></script>
 </body>
 </html>

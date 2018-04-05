@@ -114,7 +114,12 @@ class WorldObject {
     if (world.size.contains(this.position.add(this.size)))
       this.speed = this.speed.add(world.gravity);
     this.position = this.position.add(this.speed);
+
+    this.resetCross();
     
+  }
+
+  public resetCross():void {
     let crossX = this.position.x - world.size.x - this.size.x;
     if (crossX > 0) this.position.x -= crossX;
     if (this.position.x < 0) this.position.x = 0;
@@ -224,10 +229,12 @@ class Ball extends WorldObject {
           let norm = this.getCenterPoint().add(object.getCenterPoint().multiply(-1));
           norm = norm.multiply(1/norm.length());
           let cross = norm.multiply(Math.abs(this.getRadius()+object.getRadius() - this.getCenterPoint().add(object.getCenterPoint().multiply(-1)).length()));
-          this.position = this.position.add(cross.multiply(1/2));
-          object.position = object.position.add(cross.multiply(-1/2));
           this.speed = this.speed.add(norm.multiply(-v1+newV1)).multiply(this.elasticity);
           object.speed = object.speed.add(norm.multiply(-v2+newV2)).multiply(this.elasticity);
+          this.position = this.position.add(cross.multiply(1/2));
+          object.position = object.position.add(cross.multiply(-1/2));
+          this.resetCross();
+          object.resetCross();
         }
       }
     }
@@ -331,6 +338,7 @@ class World {
   public pointer:Pointer = new Pointer();
   public objects:Array<WorldObject>;
   public ctx:any;
+  public motionSensor:boolean = true;
   private ticks:number = 0;
   private ticksInterval:number = 1000;
   private fps:number = 0;
@@ -359,6 +367,10 @@ class World {
 
   public getFPS():number {
     return this.fps;
+  }
+
+  public resetGravity():void {
+    this.gravity = new Point(0, 0);
   }
 
   private tick():void {
@@ -435,6 +447,15 @@ for (let i = 0; i < 10; i++) {
   world.addObject(Ball.createRandom(world.size, Rand.getRandomInt(20, 60)));
 }
 world.addObject(new GravitySlider(new Point(100, 100), new Point(50, 50)));
+
+document.getElementById("motionSensor").addEventListener("click", () => {
+  world.motionSensor = this.checked;
+});
+
+document.getElementById("resetGravity").addEventListener("click", () => {
+  world.resetGravity();
+});
+
 window.addEventListener("resize", () => {
   world.resize();
 });
@@ -470,7 +491,8 @@ window.addEventListener("touchend", (event) => {
 });
 
 window.addEventListener("devicemotion", function (event) {
-  world.gravity = new Point(event.accelerationIncludingGravity.x/10, -event.accelerationIncludingGravity.y/10);
-  world.gravity.multiply(1/30);
+  if (world.motionSensor)
+    world.gravity = new Point(event.accelerationIncludingGravity.x/10, -event.accelerationIncludingGravity.y/10);
+  
 });
 

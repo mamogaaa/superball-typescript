@@ -8,6 +8,7 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var _this = this;
 var Color = /** @class */ (function () {
     function Color(r, g, b, a) {
         if (a === void 0) { a = 1; }
@@ -114,6 +115,9 @@ var WorldObject = /** @class */ (function () {
         if (world.size.contains(this.position.add(this.size)))
             this.speed = this.speed.add(world.gravity);
         this.position = this.position.add(this.speed);
+        this.resetCross();
+    };
+    WorldObject.prototype.resetCross = function () {
         var crossX = this.position.x - world.size.x - this.size.x;
         if (crossX > 0)
             this.position.x -= crossX;
@@ -222,10 +226,12 @@ var Ball = /** @class */ (function (_super) {
                     var norm = this.getCenterPoint().add(object.getCenterPoint().multiply(-1));
                     norm = norm.multiply(1 / norm.length());
                     var cross = norm.multiply(Math.abs(this.getRadius() + object.getRadius() - this.getCenterPoint().add(object.getCenterPoint().multiply(-1)).length()));
-                    this.position = this.position.add(cross.multiply(1 / 2));
-                    object.position = object.position.add(cross.multiply(-1 / 2));
                     this.speed = this.speed.add(norm.multiply(-v1 + newV1)).multiply(this.elasticity);
                     object.speed = object.speed.add(norm.multiply(-v2 + newV2)).multiply(this.elasticity);
+                    this.position = this.position.add(cross.multiply(1 / 2));
+                    object.position = object.position.add(cross.multiply(-1 / 2));
+                    this.resetCross();
+                    object.resetCross();
                 }
             }
         }
@@ -323,6 +329,7 @@ var World = /** @class */ (function () {
     function World(element) {
         this.element = element;
         this.pointer = new Pointer();
+        this.motionSensor = true;
         this.ticks = 0;
         this.ticksInterval = 1000;
         this.fps = 0;
@@ -353,6 +360,9 @@ var World = /** @class */ (function () {
     };
     World.prototype.getFPS = function () {
         return this.fps;
+    };
+    World.prototype.resetGravity = function () {
+        this.gravity = new Point(0, 0);
     };
     World.prototype.tick = function () {
         var _this = this;
@@ -433,6 +443,12 @@ for (var i = 0; i < 10; i++) {
     world.addObject(Ball.createRandom(world.size, Rand.getRandomInt(20, 60)));
 }
 world.addObject(new GravitySlider(new Point(100, 100), new Point(50, 50)));
+document.getElementById("motionSensor").addEventListener("click", function () {
+    world.motionSensor = _this.checked;
+});
+document.getElementById("resetGravity").addEventListener("click", function () {
+    world.resetGravity();
+});
 window.addEventListener("resize", function () {
     world.resize();
 });
@@ -461,6 +477,6 @@ window.addEventListener("touchend", function (event) {
     event.preventDefault();
 });
 window.addEventListener("devicemotion", function (event) {
-    world.gravity = new Point(event.accelerationIncludingGravity.x / 10, -event.accelerationIncludingGravity.y / 10);
-    world.gravity.multiply(1 / 30);
+    if (world.motionSensor)
+        world.gravity = new Point(event.accelerationIncludingGravity.x / 10, -event.accelerationIncludingGravity.y / 10);
 });
