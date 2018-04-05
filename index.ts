@@ -20,6 +20,14 @@ class Rand {
   static getRandomColor(start:number = 60, end:number = 255):Color {
     return new Color(this.getRandomInt(start, end), this.getRandomInt(start, end), this.getRandomInt(start, end))
   }
+
+  static getRandomString(length:number = 10):string {
+    let text:string = "";
+    let possible:string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    for (let i = 0; i < length; i++)
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+    return text;
+  }
 }
 
 class Point {
@@ -35,8 +43,16 @@ class Point {
     return new Point(this.x * n, this.y * n);
   }
 
-  public scalar(p:Point):Point {
+  public multiplyEach(p:Point):Point {
     return new Point(this.x * p.x, this.y * p.y);
+  }
+
+  public scalar(p:Point):number {
+    return this.x * p.x + this.y * p.y;
+  }
+
+  public projection(p:Point):number {
+    return this.scalar(p)/p.length();
   }
 
   public length():number {
@@ -61,12 +77,15 @@ class WorldObject {
   public removed:boolean;
   public elasticity:number;
   public hover:boolean = false;
+  public collision:boolean = false;
   public drag:boolean = false;
   public priority:number = 10;
+  public density:number = 1;
+  public id:string;
   protected dragPoint:Point = new Point(0, 0);
 
   constructor(public size:Point, public position:Point, public speed:Point = new Point(0, 0)) {
-  
+    this.id = Rand.getRandomString(10);
   }
 
   public init(world:World):void {
@@ -78,6 +97,7 @@ class WorldObject {
   }
 
   public tick(world:World):void {
+    this.processCollisions(world);
     this.speed = this.speed.round(1);
     this.position = this.position.round(1);
 
@@ -90,9 +110,20 @@ class WorldObject {
     if (this.position.y <= 0 && this.speed.y < 0)
       this.speed.y = Math.abs(this.speed.y)*this.elasticity;
 
+
     if (world.size.contains(this.position.add(this.size)))
       this.speed = this.speed.add(world.gravity);
     this.position = this.position.add(this.speed);
+    
+    let crossX = this.position.x - world.size.x - this.size.x;
+    if (crossX > 0) this.position.x -= crossX;
+    if (this.position.x < 0) this.position.x = 0;
+    let crossY = this.position.y - world.size.y - this.size.y;
+    if (crossY > 0) this.position.y -= crossY;
+    if (this.position.y < 0) this.position.y = 0;
+  }
+
+  protected processCollisions(world:World):void {
   }
 
   public remove():void {
@@ -122,6 +153,14 @@ class WorldObject {
     return this.containsPoint(p);
   }
 
+  public getCenterPoint():Point {
+    return this.position.add(this.size.multiply(1/2));
+  }
+
+  public getWeight():number {
+    return this.density*this.size.x*this.size.y;
+  }
+
   protected containsPoint(p:Point):boolean {
     return this.size.contains(p.add(this.position.multiply(-1)));
   }
@@ -136,7 +175,7 @@ class WorldObject {
 class Ball extends WorldObject {
   public color:Color = Rand.getRandomColor();
   public init(world:World):void {
-    this.elasticity = 0.8;
+    this.elasticity = 0.95;
   }
 
   public render(ctx:any):void {
@@ -144,6 +183,14 @@ class Ball extends WorldObject {
     ctx.arc(this.position.x + this.size.x/2, this.position.y + this.size.y/2, this.size.x/2, 2 * Math.PI, false);
     ctx.fillStyle = this.getColor().toString();
     ctx.fill();
+  }
+
+  public getRadius():number {
+    return this.size.x/2;
+  }
+
+  public getWeight():number {
+    return this.density*this.getRadius()*this.getRadius()*Math.PI;
   }
 
   protected containsPoint(p:Point):boolean {
@@ -156,12 +203,39 @@ class Ball extends WorldObject {
       return this.color.setAlpha(0.6);
     if (this.hover)
       return this.color.setAlpha(0.8);
+    if (this.collision)
+      return new Color(255, 0, 0, 0.5);
     return this.color;
   }
 
-  static createRandom(worldSize:Point, radius:number = Rand.getRandomInt(20, 120), speed = Math.random()*10 - 5):Ball {
+  protected processCollisions(world:World):void {
+    for (let object of world.objects) {
+      if (object.id == this.id) continue;
+      if (object.drag) continue;
+      if (object instanceof Ball) {
+
+        if (this.getCenterPoint().add(object.getCenterPoint().multiply(-1)).length() <= this.getRadius()+object.getRadius()) {
+          let m1 = this.getWeight(),
+              m2 = object.getWeight();
+          let v1 = this.speed.projection(this.getCenterPoint().add(object.getCenterPoint().multiply(-1))),
+              v2 = object.speed.projection(this.getCenterPoint().add(object.getCenterPoint().multiply(-1)));
+          let newV1 = (2*m2*v2+(m1-m2)*v1)/(m1+m2);
+          let newV2 = (2*m1*v1+(m2-m1)*v2)/(m1+m2);
+          let norm = this.getCenterPoint().add(object.getCenterPoint().multiply(-1));
+          norm = norm.multiply(1/norm.length());
+          let cross = norm.multiply(Math.abs(this.getRadius()+object.getRadius() - this.getCenterPoint().add(object.getCenterPoint().multiply(-1)).length()));
+          this.position = this.position.add(cross.multiply(1/2));
+          object.position = object.position.add(cross.multiply(-1/2));
+          this.speed = this.speed.add(norm.multiply(-v1+newV1)).multiply(this.elasticity);
+          object.speed = object.speed.add(norm.multiply(-v2+newV2)).multiply(this.elasticity);
+        }
+      }
+    }
+  }
+
+  static createRandom(worldSize:Point, radius:number = Rand.getRandomInt(5, 20), speed = Math.random()*40 - 20):Ball {
     let size = new Point(radius*2, radius*2);
-    let position = worldSize.add(size.multiply(-1)).scalar(new Point(Math.random(), Math.random()));
+    let position = worldSize.add(size.multiply(-1)).multiplyEach(new Point(Math.random(), Math.random()));
     return new Ball(size, position, new Point(speed*Math.random(), speed*Math.random()));
   }
 }
@@ -183,8 +257,10 @@ class Pointer {
 
     let newPosition = new Point(x, y);
     let newTimestamp = Date.now();
-    if (event.type != 'touchend')
+    if (event.type.indexOf('env') < 0)
       this.speed = newPosition.add(this.position.multiply(-1)).multiply(1/(newTimestamp - this.timestamp)*1000);
+    this.speed.x = Math.min(this.speed.x, 1);
+    this.speed.y = Math.min(this.speed.y, 1);
     this.timestamp = newTimestamp;
     this.position = newPosition;
     if (pressed !== undefined)
@@ -352,8 +428,11 @@ class World {
 }
 
 const world = new World(document.getElementById("canvas"));
+for (let i = 0; i < 200; i++) {
+  world.addObject(Ball.createRandom(world.size, Rand.getRandomInt(5, 20)));
+}
 for (let i = 0; i < 10; i++) {
-  world.addObject(Ball.createRandom(world.size));
+  world.addObject(Ball.createRandom(world.size, Rand.getRandomInt(20, 60)));
 }
 world.addObject(new GravitySlider(new Point(100, 100), new Point(50, 50)));
 window.addEventListener("resize", () => {

@@ -37,6 +37,14 @@ var Rand = /** @class */ (function () {
         if (end === void 0) { end = 255; }
         return new Color(this.getRandomInt(start, end), this.getRandomInt(start, end), this.getRandomInt(start, end));
     };
+    Rand.getRandomString = function (length) {
+        if (length === void 0) { length = 10; }
+        var text = "";
+        var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        for (var i = 0; i < length; i++)
+            text += possible.charAt(Math.floor(Math.random() * possible.length));
+        return text;
+    };
     return Rand;
 }());
 var Point = /** @class */ (function () {
@@ -50,8 +58,14 @@ var Point = /** @class */ (function () {
     Point.prototype.multiply = function (n) {
         return new Point(this.x * n, this.y * n);
     };
-    Point.prototype.scalar = function (p) {
+    Point.prototype.multiplyEach = function (p) {
         return new Point(this.x * p.x, this.y * p.y);
+    };
+    Point.prototype.scalar = function (p) {
+        return this.x * p.x + this.y * p.y;
+    };
+    Point.prototype.projection = function (p) {
+        return this.scalar(p) / p.length();
     };
     Point.prototype.length = function () {
         return Math.sqrt(this.x * this.x + this.y * this.y);
@@ -74,15 +88,19 @@ var WorldObject = /** @class */ (function () {
         this.position = position;
         this.speed = speed;
         this.hover = false;
+        this.collision = false;
         this.drag = false;
         this.priority = 10;
+        this.density = 1;
         this.dragPoint = new Point(0, 0);
+        this.id = Rand.getRandomString(10);
     }
     WorldObject.prototype.init = function (world) {
     };
     WorldObject.prototype.render = function (ctx) {
     };
     WorldObject.prototype.tick = function (world) {
+        this.processCollisions(world);
         this.speed = this.speed.round(1);
         this.position = this.position.round(1);
         if (this.position.x >= world.size.x - this.size.x && this.speed.x > 0)
@@ -96,6 +114,18 @@ var WorldObject = /** @class */ (function () {
         if (world.size.contains(this.position.add(this.size)))
             this.speed = this.speed.add(world.gravity);
         this.position = this.position.add(this.speed);
+        var crossX = this.position.x - world.size.x - this.size.x;
+        if (crossX > 0)
+            this.position.x -= crossX;
+        if (this.position.x < 0)
+            this.position.x = 0;
+        var crossY = this.position.y - world.size.y - this.size.y;
+        if (crossY > 0)
+            this.position.y -= crossY;
+        if (this.position.y < 0)
+            this.position.y = 0;
+    };
+    WorldObject.prototype.processCollisions = function (world) {
     };
     WorldObject.prototype.remove = function () {
         this.removed = true;
@@ -122,6 +152,12 @@ var WorldObject = /** @class */ (function () {
             return this.containsPoints(p);
         return this.containsPoint(p);
     };
+    WorldObject.prototype.getCenterPoint = function () {
+        return this.position.add(this.size.multiply(1 / 2));
+    };
+    WorldObject.prototype.getWeight = function () {
+        return this.density * this.size.x * this.size.y;
+    };
     WorldObject.prototype.containsPoint = function (p) {
         return this.size.contains(p.add(this.position.multiply(-1)));
     };
@@ -143,13 +179,19 @@ var Ball = /** @class */ (function (_super) {
         return _this;
     }
     Ball.prototype.init = function (world) {
-        this.elasticity = 0.8;
+        this.elasticity = 0.95;
     };
     Ball.prototype.render = function (ctx) {
         ctx.beginPath();
         ctx.arc(this.position.x + this.size.x / 2, this.position.y + this.size.y / 2, this.size.x / 2, 2 * Math.PI, false);
         ctx.fillStyle = this.getColor().toString();
         ctx.fill();
+    };
+    Ball.prototype.getRadius = function () {
+        return this.size.x / 2;
+    };
+    Ball.prototype.getWeight = function () {
+        return this.density * this.getRadius() * this.getRadius() * Math.PI;
     };
     Ball.prototype.containsPoint = function (p) {
         var center = this.position.add(this.size.multiply(0.5));
@@ -160,13 +202,39 @@ var Ball = /** @class */ (function (_super) {
             return this.color.setAlpha(0.6);
         if (this.hover)
             return this.color.setAlpha(0.8);
+        if (this.collision)
+            return new Color(255, 0, 0, 0.5);
         return this.color;
     };
+    Ball.prototype.processCollisions = function (world) {
+        for (var _i = 0, _a = world.objects; _i < _a.length; _i++) {
+            var object = _a[_i];
+            if (object.id == this.id)
+                continue;
+            if (object.drag)
+                continue;
+            if (object instanceof Ball) {
+                if (this.getCenterPoint().add(object.getCenterPoint().multiply(-1)).length() <= this.getRadius() + object.getRadius()) {
+                    var m1 = this.getWeight(), m2 = object.getWeight();
+                    var v1 = this.speed.projection(this.getCenterPoint().add(object.getCenterPoint().multiply(-1))), v2 = object.speed.projection(this.getCenterPoint().add(object.getCenterPoint().multiply(-1)));
+                    var newV1 = (2 * m2 * v2 + (m1 - m2) * v1) / (m1 + m2);
+                    var newV2 = (2 * m1 * v1 + (m2 - m1) * v2) / (m1 + m2);
+                    var norm = this.getCenterPoint().add(object.getCenterPoint().multiply(-1));
+                    norm = norm.multiply(1 / norm.length());
+                    var cross = norm.multiply(Math.abs(this.getRadius() + object.getRadius() - this.getCenterPoint().add(object.getCenterPoint().multiply(-1)).length()));
+                    this.position = this.position.add(cross.multiply(1 / 2));
+                    object.position = object.position.add(cross.multiply(-1 / 2));
+                    this.speed = this.speed.add(norm.multiply(-v1 + newV1)).multiply(this.elasticity);
+                    object.speed = object.speed.add(norm.multiply(-v2 + newV2)).multiply(this.elasticity);
+                }
+            }
+        }
+    };
     Ball.createRandom = function (worldSize, radius, speed) {
-        if (radius === void 0) { radius = Rand.getRandomInt(20, 120); }
-        if (speed === void 0) { speed = Math.random() * 10 - 5; }
+        if (radius === void 0) { radius = Rand.getRandomInt(5, 20); }
+        if (speed === void 0) { speed = Math.random() * 40 - 20; }
         var size = new Point(radius * 2, radius * 2);
-        var position = worldSize.add(size.multiply(-1)).scalar(new Point(Math.random(), Math.random()));
+        var position = worldSize.add(size.multiply(-1)).multiplyEach(new Point(Math.random(), Math.random()));
         return new Ball(size, position, new Point(speed * Math.random(), speed * Math.random()));
     };
     return Ball;
@@ -188,8 +256,10 @@ var Pointer = /** @class */ (function () {
         if (event === void 0) { event = undefined; }
         var newPosition = new Point(x, y);
         var newTimestamp = Date.now();
-        if (event.type != 'touchend')
+        if (event.type.indexOf('env') < 0)
             this.speed = newPosition.add(this.position.multiply(-1)).multiply(1 / (newTimestamp - this.timestamp) * 1000);
+        this.speed.x = Math.min(this.speed.x, 1);
+        this.speed.y = Math.min(this.speed.y, 1);
         this.timestamp = newTimestamp;
         this.position = newPosition;
         if (pressed !== undefined)
@@ -356,8 +426,11 @@ var World = /** @class */ (function () {
     return World;
 }());
 var world = new World(document.getElementById("canvas"));
+for (var i = 0; i < 200; i++) {
+    world.addObject(Ball.createRandom(world.size, Rand.getRandomInt(5, 20)));
+}
 for (var i = 0; i < 10; i++) {
-    world.addObject(Ball.createRandom(world.size));
+    world.addObject(Ball.createRandom(world.size, Rand.getRandomInt(20, 60)));
 }
 world.addObject(new GravitySlider(new Point(100, 100), new Point(50, 50)));
 window.addEventListener("resize", function () {
